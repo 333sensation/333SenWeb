@@ -391,14 +391,18 @@
       let data = hwFreq
       if (analyser && !audio.paused) {
         analyser.getByteFrequencyData(hwFreq)
+        // boost peaks aggressively
+        for (let i = 0; i < hwFreq.length; i++) {
+          hwFreq[i] = Math.min(255, hwFreq[i] * 1.6)
+        }
       } else {
-        // ambient idle animation
-        hwPhase += 0.03
+        // aggressive techno idle animation
+        hwPhase += 0.06
         for (let i = 0; i < hwFreq.length; i++) {
           hwFreq[i] = Math.max(0, Math.min(255,
-            60 + 45 * Math.sin(i * 0.25 + hwPhase) +
-            30 * Math.sin(i * 0.6 + hwPhase * 1.2) +
-            20 * Math.sin(i * 0.12 + hwPhase * 0.5)
+            80 + 100 * Math.pow(Math.abs(Math.sin(i * 0.4 + hwPhase)), 0.5) +
+            60 * Math.pow(Math.abs(Math.sin(i * 0.8 + hwPhase * 1.5)), 0.6) +
+            40 * Math.pow(Math.abs(Math.sin(i * 0.15 + hwPhase * 0.7)), 0.4)
           ))
         }
         data = hwFreq
@@ -407,13 +411,22 @@
       for (let i = 0; i < bars; i++) {
         const idx = mirror ? bars - 1 - i : i
         const val = data[idx] || 0
-        const barH = Math.max(2, (val / 255) * h * 0.95)
+        const barH = Math.max(2, (val / 255) * h)
         const x = i * (barW + gap)
         const y = h - barH
-        ctx.fillStyle = '#ffcc00'
-        ctx.globalAlpha = 0.5 + (val / 255) * 0.5
+        ctx.fillStyle = '#ffea00'
+        ctx.shadowColor = '#ffea00'
+        ctx.shadowBlur = 8
+        ctx.globalAlpha = 1
         ctx.fillRect(mirror ? w - x - barW : x, y, barW, barH)
+        // bright peak glow
+        if (val > 180) {
+          ctx.shadowBlur = 16
+          ctx.globalAlpha = 0.5
+          ctx.fillRect(mirror ? w - x - barW : x, y, barW, Math.min(barH, h * 0.15))
+        }
       }
+      ctx.shadowBlur = 0
       ctx.globalAlpha = 1
     }
 
@@ -426,10 +439,10 @@
 
       // — Static waveform (faint track overview) —
       if (waveData) {
-        wfCtx.fillStyle = 'rgba(255,204,0,0.08)'
+        wfCtx.fillStyle = 'rgba(255,234,0,0.06)'
         const bw = Math.max(1, Math.round(wfW / waveData.length))
         for (let i = 0; i < waveData.length; i++) {
-          const h = Math.max(1, Math.abs(waveData[i] * wfH * 0.4))
+          const h = Math.max(1, Math.abs(waveData[i] * wfH * 0.5))
           const x = Math.round(i * (wfW / waveData.length))
           wfCtx.fillRect(x, mid - h / 2, bw, h)
         }
@@ -450,15 +463,24 @@
       if (analyser && !audio.paused) {
         analyser.getByteFrequencyData(freqData)
         const bars = freqData.length
-        wfCtx.fillStyle = '#ffcc00'
         for (let i = 0; i < bars; i++) {
-          const h = (freqData[i] / 255) * wfH * 0.85
+          const boosted = Math.min(255, freqData[i] * 1.5)
+          const h = (boosted / 255) * wfH
           const x = (i / bars) * wfW
-          const w = Math.max(1, (wfW / bars) * 0.6)
-          wfCtx.globalAlpha = 0.55 + (freqData[i] / 255) * 0.45
+          const w = Math.max(2, (wfW / bars) * 0.8)
+          wfCtx.fillStyle = '#ffea00'
+          wfCtx.shadowColor = '#ffea00'
+          wfCtx.shadowBlur = 6
+          wfCtx.globalAlpha = 0.7 + (boosted / 255) * 0.3
           wfCtx.fillRect(x, wfH - h, w, h)
-          wfCtx.globalAlpha = 1
+          if (boosted > 180) {
+            wfCtx.shadowBlur = 14
+            wfCtx.globalAlpha = 0.4
+            wfCtx.fillRect(x, wfH - h, w, Math.min(h, wfH * 0.12))
+          }
         }
+        wfCtx.shadowBlur = 0
+        wfCtx.globalAlpha = 1
       }
     }
 
