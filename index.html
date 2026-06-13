@@ -310,6 +310,12 @@
     let waveData = null
     let waveLoaded = false
 
+    let actx = null
+    let analyser = null
+    let source = null
+    let animFrame = null
+    let freqData = null
+
     const npEl       = document.getElementById('nowPlaying')
     const npName     = document.getElementById('npName')
     const npTime     = document.getElementById('npTime')
@@ -321,6 +327,17 @@
 
     const wfCtx = wfCanvas.getContext('2d')
     let wfW = 0, wfH = 0
+
+    function initAudioGraph() {
+      if (actx) return
+      actx = new (window.AudioContext || window.webkitAudioContext)()
+      analyser = actx.createAnalyser()
+      analyser.fftSize = 256
+      freqData = new Uint8Array(analyser.frequencyBinCount)
+      source = actx.createMediaElementSource(audio)
+      source.connect(analyser)
+      analyser.connect(actx.destination)
+    }
 
     function fmt(s) {
       if (!s || isNaN(s)) return '0:00'
@@ -342,37 +359,57 @@
     function drawWaveform() {
       if (!wfW || !wfH) return
       wfCtx.clearRect(0, 0, wfW, wfH)
-      if (!waveData) return
 
       const dpr = window.devicePixelRatio || 1
-      const barW = Math.max(1, Math.round(wfW / waveData.length))
       const mid = wfH / 2
-      const amp = wfH * 0.4
 
-      wfCtx.fillStyle = '#ffcc00'
-      for (let i = 0; i < waveData.length; i++) {
-        const h = Math.max(1, Math.abs(waveData[i] * amp))
-        const x = Math.round(i * (wfW / waveData.length))
-        wfCtx.fillRect(x, mid - h / 2, barW, h)
+      // — Static waveform (faint track overview) —
+      if (waveData) {
+        wfCtx.fillStyle = 'rgba(255,204,0,0.08)'
+        const bw = Math.max(1, Math.round(wfW / waveData.length))
+        for (let i = 0; i < waveData.length; i++) {
+          const h = Math.max(1, Math.abs(waveData[i] * wfH * 0.4))
+          const x = Math.round(i * (wfW / waveData.length))
+          wfCtx.fillRect(x, mid - h / 2, bw, h)
+        }
       }
 
-      // playhead
+      // — Playhead line —
       if (audio.duration && waveLoaded) {
         const px = (audio.currentTime / audio.duration) * wfW
-        wfCtx.strokeStyle = 'rgba(255,255,255,0.7)'
-        wfCtx.lineWidth = Math.max(1, 1.5 * dpr)
+        wfCtx.strokeStyle = 'rgba(255,255,255,0.15)'
+        wfCtx.lineWidth = Math.max(1, dpr)
         wfCtx.beginPath()
         wfCtx.moveTo(px, 0)
         wfCtx.lineTo(px, wfH)
         wfCtx.stroke()
       }
+
+      // — Live frequency spectrum (overlay) —
+      if (analyser && !audio.paused) {
+        analyser.getByteFrequencyData(freqData)
+        const bars = freqData.length
+        wfCtx.fillStyle = '#ffcc00'
+        for (let i = 0; i < bars; i++) {
+          const h = (freqData[i] / 255) * wfH * 0.85
+          const x = (i / bars) * wfW
+          const w = Math.max(1, (wfW / bars) * 0.6)
+          wfCtx.globalAlpha = 0.55 + (freqData[i] / 255) * 0.45
+          wfCtx.fillRect(x, wfH - h, w, h)
+          wfCtx.globalAlpha = 1
+        }
+      }
+    }
+
+    function animateSpectrum() {
+      drawWaveform()
+      animFrame = requestAnimationFrame(animateSpectrum)
     }
 
     function loadWaveform(url) {
       waveData = null
       waveLoaded = false
       wfLoading.style.display = 'flex'
-      resizeWaveform()
 
       fetch(url)
         .then(r => r.arrayBuffer())
@@ -382,7 +419,7 @@
         })
         .then(audioBuf => {
           const raw = audioBuf.getChannelData(0)
-          const samples = Math.min(raw.length, 4000)
+          const samples = Math.min(raw.length, 3000)
           const step = Math.floor(raw.length / samples)
           const peaks = []
           for (let i = 0; i < samples; i++) {
@@ -395,16 +432,13 @@
           wfLoading.style.display = 'none'
           resizeWaveform()
         })
-        .catch(() => {
-          wfLoading.style.display = 'none'
-        })
+        .catch(() => { wfLoading.style.display = 'none' })
     }
 
     wfWrap.addEventListener('click', (e) => {
       if (!audio.duration || !waveLoaded) return
       const rect = wfWrap.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / rect.width
-      audio.currentTime = x * audio.duration
+      audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration
     })
 
     window.addEventListener('resize', resizeWaveform)
@@ -454,11 +488,14 @@
       currentTrack = track
       audio.src = track.path
       audio.load()
+      initAudioGraph()
       audio.play()
       npEl.classList.add('visible')
       npName.textContent = track.name
       wfLoading.style.display = 'flex'
       loadWaveform(track.path)
+      if (animFrame) cancelAnimationFrame(animFrame)
+      animateSpectrum()
       updateUI()
     }
 
@@ -481,7 +518,6 @@
     audio.addEventListener('timeupdate', () => {
       if (!audio.duration) return
       npTime.textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration)
-      if (waveLoaded) drawWaveform()
     })
 
     audio.addEventListener('ended', () => {
