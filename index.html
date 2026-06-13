@@ -414,8 +414,13 @@
         const barH = Math.max(2, (val / 255) * h)
         const x = i * (barW + gap)
         const y = h - barH
-        ctx.fillStyle = '#ffea00'
-        ctx.shadowColor = '#ffea00'
+        const t = i / bars
+        // orange → yellow gradient
+        const r = 255
+        const g = Math.round(140 + t * 115)
+        const b = 0
+        ctx.fillStyle = `rgb(${r},${g},${b})`
+        ctx.shadowColor = `rgb(${r},${g},${b})`
         ctx.shadowBlur = 8
         ctx.globalAlpha = 1
         ctx.fillRect(mirror ? w - x - barW : x, y, barW, barH)
@@ -468,8 +473,12 @@
           const h = (boosted / 255) * wfH
           const x = (i / bars) * wfW
           const w = Math.max(2, (wfW / bars) * 0.8)
-          wfCtx.fillStyle = '#ffea00'
-          wfCtx.shadowColor = '#ffea00'
+          const t = i / bars
+          const r = 255
+          const g = Math.round(140 + t * 115)
+          const b = 0
+          wfCtx.fillStyle = `rgb(${r},${g},${b})`
+          wfCtx.shadowColor = `rgb(${r},${g},${b})`
           wfCtx.shadowBlur = 6
           wfCtx.globalAlpha = 0.7 + (boosted / 255) * 0.3
           wfCtx.fillRect(x, wfH - h, w, h)
